@@ -24,6 +24,7 @@ use crate::{
     usage_analysis::UsageProcessor,
     verification_analysis::VerificationAnalysisProcessor,
     well_formed_instrumentation::WellFormedInstrumentationProcessor,
+    //loop_invariant_analysis::LoopInvariantAnalysisProcessor
 };
 
 pub fn default_pipeline_with_options(options: &ProverOptions) -> FunctionTargetPipeline {
@@ -75,7 +76,7 @@ pub fn default_pipeline() -> FunctionTargetPipeline {
 pub fn experimental_pipeline() -> FunctionTargetPipeline {
     // Enter your pipeline here
     let processors: Vec<Box<dyn FunctionTargetProcessor>> = vec![
-        DebugInstrumenter::new(),
+        // DebugInstrumenter::new(),
         // transformation and analysis
         EliminateImmRefsProcessor::new(),
         MutRefInstrumenter::new(),
@@ -86,14 +87,52 @@ pub fn experimental_pipeline() -> FunctionTargetPipeline {
         CleanAndOptimizeProcessor::new(),
         UsageProcessor::new(),
         VerificationAnalysisProcessor::new(),
-        LoopAnalysisProcessor::new(),
+        // LoopAnalysisProcessor::new(),
         // spec instrumentation
         SpecInstrumentationProcessor::new(),
-        DataInvariantInstrumentationProcessor::new(),
         GlobalInvariantAnalysisProcessor::new(),
         GlobalInvariantInstrumentationProcessor::new(),
-        // optimization
+        WellFormedInstrumentationProcessor::new(),
+        DataInvariantInstrumentationProcessor::new(),
+        // monomorphization
         MonoAnalysisProcessor::new(),
+        //want to add new process for loopanalysis
+        // LoopInvariantAnalysisProcessor::new()
+    ];
+
+    let mut res = FunctionTargetPipeline::default();
+    for p in processors {
+        res.add_processor(p);
+    }
+    res
+}
+
+
+pub fn rapid_pipeline() -> FunctionTargetPipeline {
+    
+    let processors: Vec<Box<dyn FunctionTargetProcessor>> = vec![
+        // DebugInstrumenter::new(),
+        // transformation and analysis
+        EliminateImmRefsProcessor::new(),
+        MutRefInstrumenter::new(),
+        ReachingDefProcessor::new(),
+        LiveVarAnalysisProcessor::new(),
+        BorrowAnalysisProcessor::new(),
+        MemoryInstrumentationProcessor::new(),
+        CleanAndOptimizeProcessor::new(),
+        UsageProcessor::new(),
+        VerificationAnalysisProcessor::new(),
+        // LoopAnalysisProcessor::new(),
+        // spec instrumentation
+        SpecInstrumentationProcessor::new(),
+        GlobalInvariantAnalysisProcessor::new(),
+        GlobalInvariantInstrumentationProcessor::new(),
+        WellFormedInstrumentationProcessor::new(),
+        DataInvariantInstrumentationProcessor::new(),
+        // monomorphization
+        MonoAnalysisProcessor::new(),
+        //want to add new process for loopanalysis
+        // LoopInvariantAnalysisProcessor::new()
     ];
 
     let mut res = FunctionTargetPipeline::default();

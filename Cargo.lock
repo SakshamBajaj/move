@@ -3366,6 +3366,7 @@ dependencies = [
  "move-ir-types",
  "move-model",
  "move-prover-boogie-backend",
+ "move-prover-rapid-backend",
  "move-prover-test-utils",
  "move-stackless-bytecode",
  "num 0.4.0",
@@ -3384,6 +3385,33 @@ dependencies = [
 
 [[package]]
 name = "move-prover-boogie-backend"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "codespan",
+ "codespan-reporting",
+ "futures",
+ "itertools 0.10.1",
+ "log",
+ "move-binary-format",
+ "move-command-line-common",
+ "move-core-types",
+ "move-model",
+ "move-stackless-bytecode",
+ "num 0.4.0",
+ "once_cell",
+ "pretty",
+ "rand 0.8.4",
+ "regex",
+ "serde 1.0.143",
+ "serde_json",
+ "tera",
+ "tokio",
+]
+
+[[package]]
+name = "move-prover-rapid-backend"
 version = "0.1.0"
 dependencies = [
  "anyhow",

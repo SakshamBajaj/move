@@ -35,6 +35,71 @@
             ],
             "outFiles": ["${workspaceFolder}/language/move-analyzer/editors/code/out/tests/**/*.js"],
             "preLaunchTask": "Pretest"
+        },
+        {
+            "name": "(lldb) move build Launch",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/move-build",
+            "args": [
+                "-m",
+                "-a",
+                "std=0x1",
+                "--flavor",
+                "flavors/",
+                "${workspaceFolder}/language/move-prover/tests/sources/functional/verify_vector.move",
+                "-d",
+                "${workspaceFolder}/language/move-stdlib/sources/vector.move"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/move/language",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "lldb"
+        },
+        {
+            "name": "move prover debug",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/move-prover",
+            "args": [
+                "--config=${workspaceFolder}/language/move-prover/mvp-config.toml",
+                "--dump-bytecode",
+                "--dump-cfg",
+                "--rapid",
+                "${workspaceFolder}/language/move-prover/tests/sources/functional/verify_reverse.move", 
+                // "--print-config",              
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/language/move-prover/tests/xsources/design/verify_reverse_bytecode",
+            "environment": [
+                {
+                    "name": "PATH",
+                    "value": "/Users/s24bajaj/bin:/Users/s24bajaj/.cargo/bin:$PATH",
+                },
+                {
+                    "name": "PATH",
+                    "value": "/Users/s24bajaj/.dotnet/tools:$PATH",
+                },
+                {
+                    "name": "DOTNET_ROOT",
+                    "value": "/Users/s24bajaj/.dotnet",
+                },
+                {
+                    "name": "Z3_EXE",
+                    "value": "/Users/s24bajaj/bin/z3",
+                },
+                {
+                    "name": "CVC5_EXE",
+                    "value": "/Users/s24bajaj/bin/cvc5",
+                },
+                {
+                    "name": "BOOGIE_EXE",
+                    "value": "/Users/s24bajaj/.dotnet/tools/boogie",
+                },
+            ],
+            "externalConsole": false,
+            "MIMode": "lldb"
         }
     ]
 }

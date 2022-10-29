@@ -72,6 +72,8 @@ pub struct Options {
     pub experimental_pipeline: bool,
     /// Options for printing out modules and functions reachable by script functions
     pub script_reach: bool,
+    /// Option to run rapid-backend generator configuration
+    pub run_rapid: bool,
 
     /// BEGIN OF STRUCTURED OPTIONS. DO NOT ADD VALUE FIELDS AFTER THIS
     /// Options for the model builder.
@@ -99,6 +101,7 @@ impl Default for Options {
             run_errmapgen: false,
             run_read_write_set: false,
             run_escape: false,
+            run_rapid: false,
             verbosity_level: LevelFilter::Info,
             move_sources: vec![],
             move_deps: vec![],
@@ -440,6 +443,11 @@ impl Options {
                     .help("whether to dump the transformed bytecode to a file")
             )
             .arg(
+                Arg::new("rapid")
+                    .long("rapid")
+                    .help("whether to run the rapid-backend pipeline for loop verification")
+            )
+            .arg(
                 Arg::new("dump-cfg")
                     .long("dump-cfg")
                     .requires("dump-bytecode")
@@ -685,6 +693,9 @@ impl Options {
         }
         if matches.is_present("escape") {
             options.run_escape = true;
+        }
+        if matches.is_present("rapid"){
+            options.run_rapid = true;
         }
         if matches.is_present("trace") {
             options.prover.auto_trace_level = AutoTraceLevel::VerifiedFunction;

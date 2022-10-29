@@ -7,7 +7,7 @@ prover's integration into the Move CLI and configured outside this tree.
 
 > NOTE: in order to run these tests locally, you must have installed tools and setup a few
 > environment variables. See [`../doc/user/install.md`](../doc/user/install.md) for details. If the
-> environment variables for configuring the prover are not set as described there, **all tests and this
+> environment variables for configuring the prover are not set as described there, **all tests in this
 > directory will trivially pass**.
 
 > NOTE: these are baseline tests, with expectations of prover output stored in files ending in
@@ -22,17 +22,17 @@ The sources in this tree can currently not be integrated with the Move package s
 in combination. To call the prover directly, skipping the package system, use a command as below:
 
 ```shell
-alias mvp=cargo run -p move-prover -- --config=<my_config.toml>
+alias mvp="cargo run -p move-prover -- --config=<my_config.toml>"
 ```
 
 The file at the path to `<my_config.toml>` should contain (at least) the following content:
 
 ```toml
 move_deps = [
-    "<your-path-to>/diem/language/move-stdlib/sources"
+    "<your-path-to>/move/language/move-stdlib/sources"
 ]
 move_named_address_values = [
-    "Std=0x1",
+    "std=0x1",
 ]
 ```
 

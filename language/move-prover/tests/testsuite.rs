@@ -294,7 +294,7 @@ fn main() {
         if read_env_var(ENV_TEST_EXTENDED) == "1" {
             collect_enabled_tests(&mut reqs, "extended", feature, "tests/xsources");
         } else {
-            collect_enabled_tests(&mut reqs, "unit", feature, "tests/sources");
+            collect_enabled_tests(&mut reqs, "unit", feature, "tests/sources/functional/verify_vector.move");
         }
     }
     datatest_stable::runner(&reqs);

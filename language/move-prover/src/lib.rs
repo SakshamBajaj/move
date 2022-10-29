@@ -120,6 +120,7 @@ pub fn run_move_prover_with_model<W: WriteColor>(
         };
     }
 
+    
     // Check correct backend versions.
     options.backend.check_tool_versions()?;
 
@@ -138,6 +139,14 @@ pub fn run_move_prover_with_model<W: WriteColor>(
         error_writer,
         "exiting with bytecode transformation errors",
     )?;
+
+    // Same for rapid analysis
+    if options.run_rapid {
+        return {
+            run_rapid(env, &options, now);
+            Ok(())
+        };
+    }
 
     // Generate boogie code
     let now = Instant::now();
@@ -225,6 +234,43 @@ pub fn verify_boogie(
     Ok(())
 }
 
+/// TODO: Document generate rapid
+pub fn generate_rapid(
+    env: &GlobalEnv,
+    options: &Options,
+    targets: &FunctionTargetsHolder,
+) -> anyhow::Result<CodeWriter> {
+    let writer = CodeWriter::new(env.internal_loc());
+    add_prelude(env, &options.backend, &writer)?;
+    let mut translator = BoogieTranslator::new(env, &options.backend, targets, &writer);
+    translator.translate();
+    Ok(writer)
+}
+
+/// TODO: Document verify rapid
+pub fn verify_rapid(
+    env: &GlobalEnv,
+    options: &Options,
+    targets: &FunctionTargetsHolder,
+    writer: CodeWriter,
+) -> anyhow::Result<()> {
+    let output_existed = std::path::Path::new(&options.output_path).exists();
+    debug!("writing boogie to `{}`", &options.output_path);
+    writer.process_result(|result| fs::write(&options.output_path, result))?;
+    if !options.prover.generate_only {
+        let boogie = BoogieWrapper {
+            env,
+            targets,
+            writer: &writer,
+            options: &options.backend,
+        };
+        boogie.call_boogie_and_verify_output(&options.output_path)?;
+        if !output_existed && !options.backend.keep_artifacts {
+            std::fs::remove_file(&options.output_path).unwrap_or_default();
+        }
+    }
+    Ok(())
+}
 /// Create bytecode and process it.
 pub fn create_and_process_bytecode(options: &Options, env: &GlobalEnv) -> FunctionTargetsHolder {
     let mut targets = FunctionTargetsHolder::default();
@@ -252,7 +298,11 @@ pub fn create_and_process_bytecode(options: &Options, env: &GlobalEnv) -> Functi
     // Create processing pipeline and run it.
     let pipeline = if options.experimental_pipeline {
         pipeline_factory::experimental_pipeline()
-    } else {
+    }
+    else if options.run_rapid {
+        pipeline_factory::rapid_pipeline()
+    } 
+    else {
         pipeline_factory::default_pipeline_with_options(&options.prover)
     };
 
@@ -422,4 +472,42 @@ fn run_escape(env: &GlobalEnv, options: &Options, now: Instant) {
     });
     println!("{}", String::from_utf8_lossy(&error_writer.into_inner()));
     info!("in ms, analysis took {:.3}", (end - start).as_millis())
+}
+
+
+fn run_rapid(env: &GlobalEnv, options: &Options, now: Instant){
+    // Generate rapid code
+    let now = Instant::now();
+    let code_writer = generate_rapid(env, &options, &targets)?;
+    let gen_duration = now.elapsed();
+    check_errors(
+        env,
+        &options,
+        error_writer,
+        "exiting with condition generation errors",
+    )?;
+
+    // Verify rapid code.
+    let now = Instant::now();
+    verify_boogie(env, &options, &targets, code_writer)?;
+    let verify_duration = now.elapsed();
+
+    // Report durations.
+    // info!(
+    //     "{:.3}s build, {:.3}s trafo, {:.3}s gen, {:.3}s verify, total {:.3}s",
+    //     build_duration.as_secs_f64(),
+    //     trafo_duration.as_secs_f64(),
+    //     gen_duration.as_secs_f64(),
+    //     verify_duration.as_secs_f64(),
+    //     build_duration.as_secs_f64()
+    //         + trafo_duration.as_secs_f64()
+    //         + gen_duration.as_secs_f64()
+    //         + verify_duration.as_secs_f64()
+    // );
+    check_errors(
+        env,
+        &options,
+        error_writer,
+        "exiting with verification errors",
+    )
 }
