@@ -140,29 +140,42 @@ pub fn run_move_prover_with_model<W: WriteColor>(
         "exiting with bytecode transformation errors",
     )?;
 
-    // Same for rapid analysis
-    if options.run_rapid {
-        return {
-            run_rapid(env, &options, now);
-            Ok(())
-        };
+    let now = Instant::now();
+    // Generate rapid code
+    let (gen_duration, verify_duration) = if options.run_rapid {
+        
+        let code_writer = generate_rapid(env, &options, &targets)?;
+        let gen_duration = now.elapsed();
+        check_errors(
+            env,
+            &options,
+            error_writer,
+            "exiting with condition generation errors",
+        )?;
+        // Verify rapid code.    
+        let now = Instant::now();
+        verify_rapid(env, &options, &targets, code_writer)?;
+        let verify_duration = now.elapsed();
+        (gen_duration, verify_duration)
     }
-
     // Generate boogie code
-    let now = Instant::now();
-    let code_writer = generate_boogie(env, &options, &targets)?;
-    let gen_duration = now.elapsed();
-    check_errors(
-        env,
-        &options,
-        error_writer,
-        "exiting with condition generation errors",
-    )?;
+    else{  
+        let code_writer = generate_boogie(env, &options, &targets)?;
+        let gen_duration = now.elapsed();
+        check_errors(
+            env,
+            &options,
+            error_writer,
+            "exiting with condition generation errors",
+        )?;
 
-    // Verify boogie code.
-    let now = Instant::now();
-    verify_boogie(env, &options, &targets, code_writer)?;
-    let verify_duration = now.elapsed();
+        // Verify boogie code.
+        let now = Instant::now();
+        verify_boogie(env, &options, &targets, code_writer)?;
+        let verify_duration = now.elapsed();
+        (gen_duration, verify_duration)
+    };
+
 
     // Report durations.
     info!(
@@ -472,42 +485,4 @@ fn run_escape(env: &GlobalEnv, options: &Options, now: Instant) {
     });
     println!("{}", String::from_utf8_lossy(&error_writer.into_inner()));
     info!("in ms, analysis took {:.3}", (end - start).as_millis())
-}
-
-
-fn run_rapid(env: &GlobalEnv, options: &Options, now: Instant){
-    // Generate rapid code
-    let now = Instant::now();
-    let code_writer = generate_rapid(env, &options, &targets)?;
-    let gen_duration = now.elapsed();
-    check_errors(
-        env,
-        &options,
-        error_writer,
-        "exiting with condition generation errors",
-    )?;
-
-    // Verify rapid code.
-    let now = Instant::now();
-    verify_boogie(env, &options, &targets, code_writer)?;
-    let verify_duration = now.elapsed();
-
-    // Report durations.
-    // info!(
-    //     "{:.3}s build, {:.3}s trafo, {:.3}s gen, {:.3}s verify, total {:.3}s",
-    //     build_duration.as_secs_f64(),
-    //     trafo_duration.as_secs_f64(),
-    //     gen_duration.as_secs_f64(),
-    //     verify_duration.as_secs_f64(),
-    //     build_duration.as_secs_f64()
-    //         + trafo_duration.as_secs_f64()
-    //         + gen_duration.as_secs_f64()
-    //         + verify_duration.as_secs_f64()
-    // );
-    check_errors(
-        env,
-        &options,
-        error_writer,
-        "exiting with verification errors",
-    )
 }
