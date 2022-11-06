@@ -25,7 +25,7 @@ use move_stackless_bytecode::{
 };
 use crate::{
     rapid_helpers::{
-        rapid_var_declaration
+        rapid_var_declaration, rapid_type_suffix
     },
     options::RapidOptions
 };
@@ -520,38 +520,6 @@ impl<'env> FunctionTranslator<'env> {
                             str_local(op2)
                         );
                     }
-                    Shl => {
-                        let dest = dests[0];
-                        let op1 = srcs[0];
-                        let op2 = srcs[1];
-                        let sh_type = match &self.get_local_type(dest) {
-                            Type::Primitive(PrimitiveType::U8) => "U8",
-                            Type::Primitive(PrimitiveType::U64) => "U64",
-                            Type::Primitive(PrimitiveType::U128) => "U128",
-                            _ => unreachable!(),
-                        };
-                        emitln!(
-                            writer,
-                            "call {} := $Shl{}({}, {});",
-                            str_local(dest),
-                            sh_type,
-                            str_local(op1),
-                            str_local(op2)
-                        );
-                    }
-                    Shr => {
-                        let dest = dests[0];
-                        let op1 = srcs[0];
-                        let op2 = srcs[1];
-                        emitln!(
-                            writer,
-                            "call {} := $Shr({}, {});",
-                            str_local(dest),
-                            str_local(op1),
-                            str_local(op2)
-                        );
-                    }
-                    
                     Lt => {
                         let dest = dests[0];
                         let op1 = srcs[0];
@@ -655,318 +623,17 @@ impl<'env> FunctionTranslator<'env> {
                         );
                     }
                     Destroy => {}
-                    TraceLocal(idx) => {
-                        self.track_local(*idx, srcs[0]);
-                    }
-                    TraceReturn(i) => {
-                        self.track_return(*i, srcs[0]);
-                    }
-                    TraceAbort => self.track_abort(&str_local(srcs[0])),
-                    TraceExp(kind, node_id) => self.track_exp(*kind, *node_id, srcs[0]),
-                    EmitEvent => {
-                        let msg = srcs[0];
-                        let handle = srcs[1];
-                        let suffix = boogie_type_suffix(env, &self.get_local_type(msg));
-                        emit!(
-                            writer,
-                            "$es := ${}ExtendEventStore'{}'($es, ",
-                            if srcs.len() > 2 { "Cond" } else { "" },
-                            suffix
-                        );
-                        emit!(writer, "{}, {}", str_local(handle), str_local(msg));
-                        if srcs.len() > 2 {
-                            emit!(writer, ", {}", str_local(srcs[2]));
-                        }
-                        emitln!(writer, ");");
-                    }
-                    EventStoreDiverge => {
-                        emitln!(writer, "call $es := $EventStore__diverge($es);");
-                    }
-                    TraceGlobalMem(mem) => {
-                        let mem = &mem.to_owned().instantiate(self.type_inst);
-                        let node_id = env.new_node(env.unknown_loc(), mem.to_type());
-                        self.track_global_mem(mem, node_id);
-                    }
                     CastU256 => unimplemented!(),
+                    _ => unimplemented!(),
                 }
-                if let Some(AbortAction(target, code)) = aa {
-                    emitln!(writer, "if ($abort_flag) {");
-                    writer.indent();
+                   writer.indent();
                     *last_tracked_loc = None;
-                    self.track_loc(last_tracked_loc, &loc);
-                    let code_str = str_local(*code);
-                    emitln!(writer, "{} := $abort_code;", code_str);
-                    self.track_abort(&code_str);
-                    emitln!(writer, "goto L{};", target.as_usize());
-                    writer.unindent();
-                    emitln!(writer, "}");
-                }
+                
             }
-            Abort(_, src) => {
-                emitln!(writer, "$abort_code := {};", str_local(*src));
-                emitln!(writer, "$abort_flag := true;");
-                emitln!(writer, "return;")
-            }
+            
             Nop(..) => {}
         }
         emitln!(writer);
-    }
-
-    fn translate_write_back(&self, dest: &BorrowNode, edge: &BorrowEdge, src: TempIndex) {
-        use BorrowNode::*;
-        let writer = self.parent.writer;
-        let env = self.parent.env;
-        let src_str = format!("$t{}", src);
-        match dest {
-            ReturnPlaceholder(_) => {
-                unreachable!("unexpected transient borrow node")
-            }
-            GlobalRoot(memory) => {
-                assert!(matches!(edge, BorrowEdge::Direct));
-                let memory = &memory.to_owned().instantiate(self.type_inst);
-                let memory_name = boogie_resource_memory_name(env, memory, &None);
-                emitln!(
-                    writer,
-                    "{} := $ResourceUpdate({}, $GlobalLocationAddress({}),\n    \
-                                     $Dereference({}));",
-                    memory_name,
-                    memory_name,
-                    src_str,
-                    src_str
-                );
-            }
-            LocalRoot(idx) => {
-                assert!(matches!(edge, BorrowEdge::Direct));
-                emitln!(writer, "$t{} := $Dereference({});", idx, src_str);
-            }
-            Reference(idx) => {
-                let dst_ty = &self.get_local_type(*idx).skip_reference().clone();
-                let dst_value = format!("$Dereference($t{})", idx);
-                let src_value = format!("$Dereference({})", src_str);
-                let get_path_index = |offset: usize| {
-                    if offset == 0 {
-                        format!(
-                            "ReadVec(p#$Mutation({}), LenVec(p#$Mutation($t{})))",
-                            src_str, idx
-                        )
-                    } else {
-                        format!(
-                            "ReadVec(p#$Mutation({}), LenVec(p#$Mutation($t{})) + {})",
-                            src_str, idx, offset
-                        )
-                    }
-                };
-                let update = if let BorrowEdge::Hyper(edges) = edge {
-                    self.translate_write_back_update(
-                        dst_ty,
-                        &mut || dst_value.clone(),
-                        &get_path_index,
-                        src_value,
-                        edges,
-                        0,
-                    )
-                } else {
-                    self.translate_write_back_update(
-                        dst_ty,
-                        &mut || dst_value.clone(),
-                        &get_path_index,
-                        src_value,
-                        &[edge.to_owned()],
-                        0,
-                    )
-                };
-                emitln!(
-                    writer,
-                    "$t{} := $UpdateMutation($t{}, {});",
-                    idx,
-                    idx,
-                    update
-                );
-            }
-        }
-    }
-
-    fn translate_write_back_update(
-        &self,
-        dst_ty: &Type,
-        mk_dest: &mut dyn FnMut() -> String,
-        get_path_index: &dyn Fn(usize) -> String,
-        src: String,
-        edges: &[BorrowEdge],
-        at: usize,
-    ) -> String {
-        if at >= edges.len() {
-            src
-        } else {
-            match &edges[at] {
-                BorrowEdge::Direct => self.translate_write_back_update(
-                    dst_ty,
-                    mk_dest,
-                    get_path_index,
-                    src,
-                    edges,
-                    at + 1,
-                ),
-                BorrowEdge::Field(memory, offset) => {
-                    let memory = memory.to_owned().instantiate(self.type_inst);
-                    let struct_env = &self.parent.env.get_struct_qid(memory.to_qualified_id());
-                    let field_env = &struct_env.get_field_by_offset(*offset);
-                    let sel_fun = boogie_field_sel(field_env, &memory.inst);
-                    let new_dest = format!("{}({})", sel_fun, (*mk_dest)());
-                    let new_dest_ty = &field_env.get_type().instantiate(&memory.inst);
-                    let mut new_dest_needed = false;
-                    let new_src = self.translate_write_back_update(
-                        new_dest_ty,
-                        &mut || {
-                            new_dest_needed = true;
-                            format!("$$sel{}", at)
-                        },
-                        get_path_index,
-                        src,
-                        edges,
-                        at + 1,
-                    );
-                    let update_fun = boogie_field_update(field_env, &memory.inst);
-                    if new_dest_needed {
-                        format!(
-                            "(var $$sel{} := {}; {}({}, {}))",
-                            at,
-                            new_dest,
-                            update_fun,
-                            (*mk_dest)(),
-                            new_src
-                        )
-                    } else {
-                        format!("{}({}, {})", update_fun, (*mk_dest)(), new_src)
-                    }
-                }
-                BorrowEdge::Index => {
-                    // Index edge is used for both vectors and tables. Determine which operations
-                    // to use to read and update.
-                    let (read_aggregate, update_aggregate, elem_ty) = match dst_ty {
-                        Type::Vector(et) => ("ReadVec", "UpdateVec", et.as_ref().clone()),
-                        // If its not a vector, we assume it is the Table type.
-                        Type::Struct(_, _, inst) => ("GetTable", "UpdateTable", inst[1].clone()),
-                        _ => unreachable!(),
-                    };
-                    // Compute the offset into the path where to retrieve the index.
-                    let offset = edges[0..at]
-                        .iter()
-                        .filter(|e| !matches!(e, BorrowEdge::Direct))
-                        .count();
-                    let index = (*get_path_index)(offset);
-                    let new_dest = format!("{}({}, {})", read_aggregate, (*mk_dest)(), index);
-                    let mut new_dest_needed = false;
-                    // Recursively perform write backs for next edges
-                    let new_src = self.translate_write_back_update(
-                        &elem_ty,
-                        &mut || {
-                            new_dest_needed = true;
-                            format!("$$sel{}", at)
-                        },
-                        get_path_index,
-                        src,
-                        edges,
-                        at + 1,
-                    );
-                    if new_dest_needed {
-                        format!(
-                            "(var $$sel{} := {}; {}({}, {}, {}))",
-                            at,
-                            new_dest,
-                            update_aggregate,
-                            (*mk_dest)(),
-                            index,
-                            new_src
-                        )
-                    } else {
-                        format!(
-                            "{}({}, {}, {})",
-                            update_aggregate,
-                            (*mk_dest)(),
-                            index,
-                            new_src
-                        )
-                    }
-                }
-                BorrowEdge::Hyper(_) => unreachable!("unexpected borrow edge"),
-            }
-        }
-    }
-
-    /// Track location for execution trace, avoiding to track the same line multiple times.
-    fn track_loc(&self, last_tracked_loc: &mut Option<(Loc, LineIndex)>, loc: &Loc) {
-        let env = self.fun_target.global_env();
-        if let Some(l) = env.get_location(loc) {
-            if let Some((last_loc, last_line)) = last_tracked_loc {
-                if *last_line == l.line {
-                    // This line already tracked.
-                    return;
-                }
-                *last_loc = loc.clone();
-                *last_line = l.line;
-            } else {
-                *last_tracked_loc = Some((loc.clone(), l.line));
-            }
-            emitln!(
-                self.parent.writer,
-                "assume {{:print \"$at{}\"}} true;",
-                self.loc_str(loc)
-            );
-        }
-    }
-
-    fn track_abort(&self, code_var: &str) {
-        emitln!(
-            self.parent.writer,
-            &boogie_debug_track_abort(self.fun_target, code_var)
-        );
-    }
-
-    /// Generates an update of the debug information about temporary.
-    fn track_local(&self, origin_idx: TempIndex, idx: TempIndex) {
-        emitln!(
-            self.parent.writer,
-            &boogie_debug_track_local(self.fun_target, origin_idx, idx, &self.get_local_type(idx),)
-        );
-    }
-
-    /// Generates an update of the debug information about the return value at given location.
-    fn track_return(&self, return_idx: usize, idx: TempIndex) {
-        emitln!(
-            self.parent.writer,
-            &boogie_debug_track_return(self.fun_target, return_idx, idx, &self.get_local_type(idx))
-        );
-    }
-
-    fn track_exp(&self, kind: TraceKind, node_id: NodeId, temp: TempIndex) {
-        let env = self.parent.env;
-        let writer = self.parent.writer;
-        let ty = self.get_local_type(temp);
-        let temp_str = if ty.is_reference() {
-            let new_temp = boogie_temp(env, ty.skip_reference(), 0);
-            emitln!(writer, "{} := $Dereference($t{});", new_temp, temp);
-            new_temp
-        } else {
-            format!("$t{}", temp)
-        };
-        let suffix = if kind == TraceKind::SubAuto {
-            "_sub"
-        } else {
-            ""
-        };
-        emitln!(
-            self.parent.writer,
-            "assume {{:print \"$track_exp{}({}):\", {}}} true;",
-            suffix,
-            node_id.as_usize(),
-            temp_str,
-        );
-    }
-
-    fn loc_str(&self, loc: &Loc) -> String {
-        let file_idx = self.fun_target.global_env().file_id_to_idx(loc.file_id());
-        format!("({},{},{})", file_idx, loc.span().start(), loc.span().end())
     }
 
     /// Compute temporaries needed for the compilation of given function. Because boogie does
@@ -982,47 +649,11 @@ impl<'env> FunctionTranslator<'env> {
         let mut need = |ty: &Type, n: usize| {
             // Index by type suffix, which is more coarse grained then type.
             let ty = ty.skip_reference();
-            let suffix = boogie_type_suffix(env, ty);
+            let suffix = rapid_type_suffix(env, ty);
             let cnt = res.entry(suffix).or_insert_with(|| (ty.to_owned(), 0));
             (*cnt).1 = (*cnt).1.max(n);
         };
-        for bc in &fun_target.data.code {
-            match bc {
-                Call(_, _, oper, srcs, ..) => match oper {
-                    TraceExp(_, id) => need(&self.inst(&env.get_node_type(*id)), 1),
-                    TraceReturn(idx) => need(&self.inst(fun_target.get_return_type(*idx)), 1),
-                    TraceLocal(_) => need(&self.get_local_type(srcs[0]), 1),
-                    Havoc(HavocKind::MutationValue) => need(&self.get_local_type(srcs[0]), 1),
-                    _ => {}
-                },
-                Prop(_, PropKind::Modifies, exp) => {
-                    need(&BOOL_TYPE, 1);
-                    need(&self.inst(&env.get_node_type(exp.node_id())), 1)
-                }
-                _ => {}
-            }
-        }
+        
         res
     }
-}
-
-fn struct_has_native_equality(
-    struct_env: &StructEnv<'_>,
-    inst: &[Type],
-    options: &BoogieOptions,
-) -> bool {
-    if options.native_equality {
-        // Everything has native equality
-        return true;
-    }
-    for field in struct_env.get_fields() {
-        if !has_native_equality(
-            struct_env.module_env.env,
-            options,
-            &field.get_type().instantiate(inst),
-        ) {
-            return false;
-        }
-    }
-    true
 }
