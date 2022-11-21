@@ -46,7 +46,7 @@ pub mod boogie_wrapper;
 pub mod bytecode_translator;
 pub mod options;
 mod prover_task_runner;
-mod spec_translator;
+pub mod spec_translator;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 struct TypeInfo {

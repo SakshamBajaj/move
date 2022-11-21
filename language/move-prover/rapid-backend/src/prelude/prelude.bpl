@@ -16,8 +16,6 @@ bound to included theories is determined by the function `crate::add_prelude`, b
 options provided to the prover.
 #}
 
-Need to change prelude to .spec file maybe
-
 // ============================================================================================
 // Primitive Types
 

@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #![forbid(unsafe_code)]
+mod rapid_helpers;
 pub mod options;
+pub mod bytecode_translator;
 
 #[allow(unused_imports)]
 use tera::{Context, Tera};

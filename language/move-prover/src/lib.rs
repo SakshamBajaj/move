@@ -23,6 +23,9 @@ use move_model::{
 use move_prover_boogie_backend::{
     add_prelude, boogie_wrapper::BoogieWrapper, bytecode_translator::BoogieTranslator,
 };
+use move_prover_rapid_backend::{
+    add_prelude as add_rapid_prelude, bytecode_translator::RapidTranslator,
+};
 use move_stackless_bytecode::{
     escape_analysis::EscapeAnalysisProcessor,
     function_target_pipeline::{FunctionTargetPipeline, FunctionTargetsHolder},
@@ -254,8 +257,8 @@ pub fn generate_rapid(
     targets: &FunctionTargetsHolder,
 ) -> anyhow::Result<CodeWriter> {
     let writer = CodeWriter::new(env.internal_loc());
-    add_prelude(env, &options.backend, &writer)?;
-    let mut translator = BoogieTranslator::new(env, &options.backend, targets, &writer);
+    add_rapid_prelude(env, &options.rapid_options, &writer)?;
+    let mut translator = RapidTranslator::new(env, &options.rapid_options, targets, &writer);
     translator.translate();
     Ok(writer)
 }

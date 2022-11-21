@@ -5,7 +5,7 @@
 use move_command_line_common::env::{read_env_var};
 use serde::{Deserialize, Serialize};
 
-/// Default flags passed to boogie. Additional flags will be added to this via the -B option.
+/// Default flags passed to rapid. Additional flags will be added to this via the -B option.
 const DEFAULT_RAPID_FLAGS: &[&str] = &[];
 
 //TODO: Fill these correctly
@@ -13,15 +13,15 @@ const DEFAULT_RAPID_FLAGS: &[&str] = &[];
 // const MIN_VAMPIRE_VERSION: &str = "0.0";
 
 
-/// Boogie options.
+/// rapid options.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct RapidOptions {
-    /// Path to the boogie executable.
+    /// Path to the rapid executable.
     pub rapid_exe: String,
-    /// Path to the z3 executable.
+    /// Path to the vampire executable.
     pub vampire_exe: String,
-    /// List of flags to pass on to boogie.
+    /// List of flags to pass on to rapid.
     pub rapid_flags: Vec<String>,
     /// A seed for the prover.
     pub random_seed: usize,

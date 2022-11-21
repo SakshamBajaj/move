@@ -1,9 +1,11 @@
 move_deps = [
     "/home/sbajaj/move/language/move-stdlib/sources",
     "/home/sbajaj/move/language/move-stdlib/nursery/sources",
-    "/Users/s24bajaj/move/language/extensions/move-table-extension/sources"
+    "/home/sbajaj/move/language/extensions/move-table-extension/sources"
 ]
 move_named_address_values = [
     "std=0x1",
     "extensions=0x2",
 ]
+output_path = "output.spec"
+run_rapid = true

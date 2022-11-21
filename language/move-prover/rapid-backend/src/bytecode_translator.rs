@@ -44,7 +44,6 @@ pub struct RapidTranslator<'env> {
     env: &'env GlobalEnv,
     options: &'env RapidOptions,
     writer: &'env CodeWriter,
-    spec_translator: SpecTranslator<'env>,
     targets: &'env FunctionTargetsHolder,
 }
 
@@ -66,14 +65,12 @@ impl<'env> RapidTranslator<'env> {
             options,
             targets,
             writer,
-            spec_translator: SpecTranslator::new(writer, env, options),
         }
     }
 
     pub fn translate(&mut self) {
         let writer = self.writer;
         let env = self.env;
-        let spec_translator = &self.spec_translator;
 
         let mono_info = mono_analysis::get_info(self.env);
         let empty = &BTreeSet::new();
@@ -82,19 +79,12 @@ impl<'env> RapidTranslator<'env> {
             writer,
             "\n\n//==================================\n// Begin Translation\n"
         );
-
-        self.spec_translator
-            .translate_axioms(env, mono_info.as_ref());
-
-        let mut translated_types = BTreeSet::new();
+        
         let mut translated_funs = BTreeSet::new();
         let mut verified_functions_count = 0;
         info!("generating verification conditions");
         for module_env in self.env.get_modules() {
             self.writer.set_location(&module_env.env.internal_loc());
-
-            spec_translator.translate_spec_vars(&module_env, mono_info.as_ref());
-            spec_translator.translate_spec_funs(&module_env, mono_info.as_ref());
 
             for ref fun_env in module_env.get_functions() {
                 if fun_env.is_native_or_intrinsic() {
@@ -147,7 +137,7 @@ impl<'env> RapidTranslator<'env> {
                             ))
                             .unwrap_or(empty)
                         {
-                            let fun_name = boogie_function_name(fun_env, type_inst);
+                            let fun_name = "main".to_string();
                             if !translated_funs.insert(fun_name) {
                                 continue;
                             }
@@ -162,18 +152,7 @@ impl<'env> RapidTranslator<'env> {
                 }
             }
         }
-        // Emit any finalization items required by spec translation.
-        self.spec_translator.finalize();
         info!("{} verification conditions", verified_functions_count);
-    }
-
-    fn emit_main_function(&self, body_fn: impl Fn()){
-        let writer = self.parent.writer;
-        emitln!(writer, "func main");
-        writer.indent();
-        body_fn();
-        writer.unindent();
-        emitln!(writer, "}");
     }
     
 }
@@ -196,14 +175,20 @@ impl<'env> FunctionTranslator<'env> {
             .instantiate(self.type_inst)
     }
 
+    fn emit_main_function(self){
+        let writer = self.parent.writer;
+        emitln!(writer, "func main");
+        writer.indent();
+        self.generate_function_body();
+        writer.unindent();
+        emitln!(writer, "}");
+    }
     /// Translates the given function. Only the main function for now.
     fn translate(self) {
         let writer = self.parent.writer;
         let fun_target = self.fun_target;
         let env = fun_target.global_env();
-        
-        self.generate_function_body();
-        emitln!(self.parent.writer);
+        self.emit_main_function();
     }
 
 
@@ -217,33 +202,31 @@ impl<'env> FunctionTranslator<'env> {
         // Be sure to set back location to the whole function definition as a default.
         writer.set_location(&fun_target.get_loc().at_start());
 
-        emitln!(writer, "{");
-        writer.indent();
-
         // Generate local variable declarations. They need to appear first in rapid.
         emitln!(writer, "// declare local variables");
         let num_args = fun_target.get_parameter_count();
         for i in num_args..fun_target.get_local_count() {
             let local_type = &self.get_local_type(i);
-            emitln!(writer, rapid_var_declaration(env, local_type, i));
+            emitln!(writer, &rapid_var_declaration(env, local_type, &i.to_string()));
         }
         // Generate declarations for renamed parameters.
         let proxied_parameters = self.get_mutable_parameters();
         for (idx, ty) in &proxied_parameters {
             emitln!(
                 writer,
-                rapid_var_declaration(env, &ty.instantiate(self.type_inst), idx)
+                &rapid_var_declaration(env, &ty.instantiate(self.type_inst), &idx.to_string())
             );
         }
 
         // Generate bytecode
         emitln!(writer, "\n// bytecode translation starts here");
         let mut last_tracked_loc = None;
+        let code = fun_target.get_bytecode();
         for bytecode in code.iter() {
             self.translate_bytecode(&mut last_tracked_loc, bytecode);
         }
 
-        writer.unindent();
+        // writer.unindent();
         emitln!(writer, "}");
     }
 
@@ -309,7 +292,7 @@ impl<'env> FunctionTranslator<'env> {
         use Bytecode::*;
 
         let writer = self.parent.writer;
-        let spec_translator = &self.parent.spec_translator;
+        
         let options = self.parent.options;
         let fun_target = self.fun_target;
         let env = fun_target.global_env();
@@ -342,82 +325,69 @@ impl<'env> FunctionTranslator<'env> {
             }
         }
 
-        // Track location for execution traces.
-        if matches!(bytecode, Call(_, _, Operation::TraceAbort, ..)) {
-            // Ensure that aborts always has the precise location instead of the
-            // line-approximated one
-            *last_tracked_loc = None;
-        }
-        self.track_loc(last_tracked_loc, &loc);
-        if matches!(bytecode, Label(_, _)) {
-            // For labels, retrack the location after the label itself, so
-            // the information will not be missing if we jump to this label
-            *last_tracked_loc = None;
-        }
-
         // Helper function to get a string for a local. TODO: Check if this is right
-        let str_local = |idx: usize| format!("{}", idx);
+        let str_local = |idx: usize| format!("t{}", idx);
 
         // Translate the bytecode instruction.
         match bytecode {
             
-            //Rapid does not support assertions at arbitrary points in the code
-            Prop(id, kind, exp) => match kind {
-                PropKind::Assert => {
-                    emit!(writer, "assert ");
-                    let info = fun_target
-                        .get_vc_info(*id)
-                        .map(|s| s.as_str())
-                        .unwrap_or("unknown assertion failed");
-                    emit!(
-                        writer,
-                        "{{:msg \"assert_failed{}: {}\"}}\n  ",
-                        self.loc_str(&loc),
-                        info
-                    );
-                    spec_translator.translate(exp, self.type_inst);
-                    emitln!(writer, ";");
-                }
-                PropKind::Assume => {
-                    emit!(writer, "assume ");
-                    spec_translator.translate(exp, self.type_inst);
-                    emitln!(writer, ";");
-                }
-                PropKind::Modifies => {
-                    let ty = &self.inst(&env.get_node_type(exp.node_id()));
-                    let (mid, sid, inst) = ty.require_struct();
-                    let memory = boogie_resource_memory_name(
-                        env,
-                        &mid.qualified_inst(sid, inst.to_owned()),
-                        &None,
-                    );
-                    let exists_str = boogie_temp(env, &BOOL_TYPE, 0);
-                    emitln!(writer, "havoc {};", exists_str);
-                    emitln!(writer, "if ({}) {{", exists_str);
-                    writer.with_indent(|| {
-                        let val_str = boogie_temp(env, ty, 0);
-                        emitln!(writer, "havoc {};", val_str);
-                        emit!(writer, "{} := $ResourceUpdate({}, ", memory, memory);
-                        spec_translator.translate(&exp.call_args()[0], self.type_inst);
-                        emitln!(writer, ", {});", val_str);
-                    });
-                    emitln!(writer, "} else {");
-                    writer.with_indent(|| {
-                        emit!(writer, "{} := $ResourceRemove({}, ", memory, memory);
-                        spec_translator.translate(&exp.call_args()[0], self.type_inst);
-                        emitln!(writer, ");");
-                    });
-                    emitln!(writer, "}");
-                }
-            },
+            // //Rapid does not support assertions at arbitrary points in the code
+            // Prop(id, kind, exp) => match kind {
+            //     PropKind::Assert => {
+            //         emit!(writer, "assert ");
+            //         let info = fun_target
+            //             .get_vc_info(*id)
+            //             .map(|s| s.as_str())
+            //             .unwrap_or("unknown assertion failed");
+            //         emit!(
+            //             writer,
+            //             "{{:msg \"assert_failed{}: {}\"}}\n  ",
+            //             self.loc_str(&loc),
+            //             info
+            //         );
+                    
+            //         emitln!(writer, ";");
+            //     }
+            //     PropKind::Assume => {
+            //         emit!(writer, "assume ");
+            //         spec_translator.translate(exp, self.type_inst);
+            //         emitln!(writer, ";");
+            //     }
+            //     PropKind::Modifies => {
+            //         let ty = &self.inst(&env.get_node_type(exp.node_id()));
+            //         let (mid, sid, inst) = ty.require_struct();
+            //         let memory = boogie_resource_memory_name(
+            //             env,
+            //             &mid.qualified_inst(sid, inst.to_owned()),
+            //             &None,
+            //         );
+            //         let exists_str = boogie_temp(env, &BOOL_TYPE, 0);
+            //         emitln!(writer, "havoc {};", exists_str);
+            //         emitln!(writer, "if ({}) {{", exists_str);
+            //         writer.with_indent(|| {
+            //             let val_str = boogie_temp(env, ty, 0);
+            //             emitln!(writer, "havoc {};", val_str);
+            //             emit!(writer, "{} := $ResourceUpdate({}, ", memory, memory);
+            //             spec_translator.translate(&exp.call_args()[0], self.type_inst);
+            //             emitln!(writer, ", {});", val_str);
+            //         });
+            //         emitln!(writer, "} else {");
+            //         writer.with_indent(|| {
+            //             emit!(writer, "{} := $ResourceRemove({}, ", memory, memory);
+            //             spec_translator.translate(&exp.call_args()[0], self.type_inst);
+            //             emitln!(writer, ");");
+            //         });
+            //         emitln!(writer, "}");
+            //     }
+            // },
             
             Branch(_, then_target, else_target, idx) => emitln!(
                 writer,
-                "if ({}) {",
+                "if (t{}) {{",
                 idx
             ),
             Assign(_, dest, src, _) => {
-                emitln!(writer, "{} = {};", str_local(*dest), str_local(*src));
+                emitln!(writer, "t{} = {};", str_local(*dest), str_local(*src));
             }
             
             Load(_, dest, c) => {
@@ -443,16 +413,13 @@ impl<'env> FunctionTranslator<'env> {
                     OpaqueCallBegin(_, _, _) | OpaqueCallEnd(_, _, _) => {
                         // These are just markers.  There is no generated code.
                     }
-                    WriteBack(node, edge) => {
-                        self.translate_write_back(node, edge, srcs[0]);
-                    }
                     
                     Not => {
                         let src = srcs[0];
                         let dest = dests[0];
                         emitln!(
                             writer,
-                            "call {} := $Not({});",
+                            "{} = !{};",
                             str_local(dest),
                             str_local(src)
                         );
@@ -464,7 +431,7 @@ impl<'env> FunctionTranslator<'env> {
                         
                         emitln!(
                             writer,
-                            "call {} := $Add{}({}, {});",
+                            "{} = {} + {};",
                             str_local(dest),
                             str_local(op1),
                             str_local(op2)
@@ -476,7 +443,7 @@ impl<'env> FunctionTranslator<'env> {
                         let op2 = srcs[1];
                         emitln!(
                             writer,
-                            "call {} := $Sub({}, {});",
+                            "{} = {} - {};",
                             str_local(dest),
                             str_local(op1),
                             str_local(op2)
@@ -489,9 +456,8 @@ impl<'env> FunctionTranslator<'env> {
                         
                         emitln!(
                             writer,
-                            "call {} := $Mul{}({}, {});",
+                            "{} = {} * {};",
                             str_local(dest),
-                            mul_type,
                             str_local(op1),
                             str_local(op2)
                         );
@@ -502,7 +468,7 @@ impl<'env> FunctionTranslator<'env> {
                         let op2 = srcs[1];
                         emitln!(
                             writer,
-                            "call {} := $Div({}, {});",
+                            "{} = {} / {};",
                             str_local(dest),
                             str_local(op1),
                             str_local(op2)
@@ -514,7 +480,7 @@ impl<'env> FunctionTranslator<'env> {
                         let op2 = srcs[1];
                         emitln!(
                             writer,
-                            "call {} := $Mod({}, {});",
+                            "{} = {} % {};",
                             str_local(dest),
                             str_local(op1),
                             str_local(op2)
@@ -526,7 +492,7 @@ impl<'env> FunctionTranslator<'env> {
                         let op2 = srcs[1];
                         emitln!(
                             writer,
-                            "call {} := $Lt({}, {});",
+                            "{} = {} < {};",
                             str_local(dest),
                             str_local(op1),
                             str_local(op2)
@@ -538,7 +504,7 @@ impl<'env> FunctionTranslator<'env> {
                         let op2 = srcs[1];
                         emitln!(
                             writer,
-                            "call {} := $Gt({}, {});",
+                            "{} = {} > {};",
                             str_local(dest),
                             str_local(op1),
                             str_local(op2)
@@ -550,7 +516,7 @@ impl<'env> FunctionTranslator<'env> {
                         let op2 = srcs[1];
                         emitln!(
                             writer,
-                            "call {} := $Le({}, {});",
+                            "{} = {} <= {};",
                             str_local(dest),
                             str_local(op1),
                             str_local(op2)
@@ -562,7 +528,7 @@ impl<'env> FunctionTranslator<'env> {
                         let op2 = srcs[1];
                         emitln!(
                             writer,
-                            "call {} := $Ge({}, {});",
+                            "{} = {} >= {};",
                             str_local(dest),
                             str_local(op1),
                             str_local(op2)
@@ -574,7 +540,7 @@ impl<'env> FunctionTranslator<'env> {
                         let op2 = srcs[1];
                         emitln!(
                             writer,
-                            "call {} := $Or({}, {});",
+                            "{} = {} || {};",
                             str_local(dest),
                             str_local(op1),
                             str_local(op2)
@@ -586,7 +552,7 @@ impl<'env> FunctionTranslator<'env> {
                         let op2 = srcs[1];
                         emitln!(
                             writer,
-                            "call {} := $And({}, {});",
+                            "{} = {} && {};",
                             str_local(dest),
                             str_local(op1),
                             str_local(op2)
@@ -596,13 +562,10 @@ impl<'env> FunctionTranslator<'env> {
                         let dest = dests[0];
                         let op1 = srcs[0];
                         let op2 = srcs[1];
-                        let oper =
-                            boogie_equality_for_type(env, oper == &Eq, &self.get_local_type(op1));
                         emitln!(
                             writer,
-                            "{} := {}({}, {});",
+                            "{} = {} == {};",
                             str_local(dest),
-                            oper,
                             str_local(op1),
                             str_local(op2)
                         );
@@ -616,22 +579,23 @@ impl<'env> FunctionTranslator<'env> {
                         );
                     }
                     Uninit => {
+                        env.error(&loc, "Unsupported operator");
                         emitln!(
                             writer,
-                            "assume l#$Mutation($t{}) == $Uninitialized();",
-                            srcs[0]
+                            "// uninit operation not supported: {:?}\nassert false;",
+                            bytecode
                         );
                     }
                     Destroy => {}
                     CastU256 => unimplemented!(),
                     _ => unimplemented!(),
                 }
-                   writer.indent();
+                    // writer.indent();
                     *last_tracked_loc = None;
                 
             }
-            
-            Nop(..) => {}
+            Nop(..) | Label(_, _) | Ret(_, _) | Abort(_, _)=> {}
+            _ => unimplemented!("{:?} operation is unimplemented", bytecode)
         }
         emitln!(writer);
     }

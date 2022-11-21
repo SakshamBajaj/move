@@ -30,6 +30,7 @@ use move_model::{
     model::VerificationScope, options::ModelBuilderOptions, simplifier::SimplificationPass,
 };
 use move_prover_boogie_backend::options::{BoogieOptions, VectorTheory};
+use move_prover_rapid_backend::options::RapidOptions;
 use move_stackless_bytecode::options::{AutoTraceLevel, ProverOptions};
 
 /// Atomic used to prevent re-initialization of logging.
@@ -84,6 +85,8 @@ pub struct Options {
     pub prover: ProverOptions,
     /// Options for the prover backend.
     pub backend: BoogieOptions,
+    /// Options for the rapid backend.
+    pub rapid_options: RapidOptions,
     /// Options for the ABI generator.
     pub abigen: AbigenOptions,
     /// Options for the error map generator.
@@ -109,6 +112,7 @@ impl Default for Options {
             model_builder: ModelBuilderOptions::default(),
             prover: ProverOptions::default(),
             backend: BoogieOptions::default(),
+            rapid_options: RapidOptions::default(),
             docgen: DocgenOptions::default(),
             abigen: AbigenOptions::default(),
             errmapgen: ErrmapOptions::default(),
