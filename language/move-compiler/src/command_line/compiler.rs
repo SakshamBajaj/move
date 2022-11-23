@@ -441,22 +441,16 @@ pub fn construct_pre_compiled_lib<Paths: Into<Symbol>, NamedAddress: Into<Symbol
     let mut cfgir = None;
     let mut compiled = None;
 
-    let save_result = |cur: &PassResult, env: &CompilationEnv| match cur {
+    let save_result = |cur: &PassResult, _env: &CompilationEnv| match cur {
         PassResult::Parser(prog) => {
             assert!(parser.is_none());
             parser = Some(prog.clone())
         }
         PassResult::Expansion(eprog) => {
-            if env.has_diags() {
-                return;
-            }
             assert!(expansion.is_none());
             expansion = Some(eprog.clone())
         }
         PassResult::Naming(nprog) => {
-            if env.has_diags() {
-                return;
-            }
             assert!(naming.is_none());
             naming = Some(nprog.clone())
         }
@@ -465,9 +459,6 @@ pub fn construct_pre_compiled_lib<Paths: Into<Symbol>, NamedAddress: Into<Symbol
             typing = Some(tprog.clone())
         }
         PassResult::HLIR(hprog) => {
-            if env.has_diags() {
-                return;
-            }
             assert!(hlir.is_none());
             hlir = Some(hprog.clone());
         }
@@ -716,12 +707,12 @@ fn has_compiled_module_magic_number(path: &str) -> bool {
         Err(_) => return false,
         Ok(f) => f,
     };
-    let mut magic = [0u8; BinaryConstants::DIEM_MAGIC_SIZE];
+    let mut magic = [0u8; BinaryConstants::MOVE_MAGIC_SIZE];
     let num_bytes_read = match file.read(&mut magic) {
         Err(_) => return false,
         Ok(n) => n,
     };
-    num_bytes_read == BinaryConstants::DIEM_MAGIC_SIZE && magic == BinaryConstants::DIEM_MAGIC
+    num_bytes_read == BinaryConstants::MOVE_MAGIC_SIZE && magic == BinaryConstants::MOVE_MAGIC
 }
 
 //**************************************************************************************************

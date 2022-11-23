@@ -28,7 +28,8 @@ pub mod unique_set;
 //**************************************************************************************************
 
 pub use move_command_line_common::parser::{
-    parse_address_number as parse_address, parse_u128, parse_u64, parse_u8, NumberFormat,
+    parse_address_number as parse_address, parse_u128, parse_u16, parse_u256, parse_u32, parse_u64,
+    parse_u8, NumberFormat,
 };
 
 //**************************************************************************************************
@@ -193,21 +194,34 @@ impl CompilationEnv {
         self.diags.extend(diags)
     }
 
-    pub fn has_diags(&self) -> bool {
+    pub fn has_warnings_or_errors(&self) -> bool {
         !self.diags.is_empty()
+    }
+
+    pub fn has_errors(&self) -> bool {
+        // Non-blocking Error is the min level considered an error
+        self.has_diags_at_or_above_severity(Severity::NonblockingError)
     }
 
     pub fn count_diags(&self) -> usize {
         self.diags.len()
     }
 
+    pub fn has_diags_at_or_above_severity(&self, threshold: Severity) -> bool {
+        match self.diags.max_severity() {
+            Some(max) if max >= threshold => true,
+            Some(_) | None => false,
+        }
+    }
+
     pub fn check_diags_at_or_above_severity(
         &mut self,
         threshold: Severity,
     ) -> Result<(), Diagnostics> {
-        match self.diags.max_severity() {
-            Some(max) if max >= threshold => Err(std::mem::take(&mut self.diags)),
-            Some(_) | None => Ok(()),
+        if self.has_diags_at_or_above_severity(threshold) {
+            Err(std::mem::take(&mut self.diags))
+        } else {
+            Ok(())
         }
     }
 
@@ -331,7 +345,7 @@ impl Flags {
         Self {
             test: false,
             verify: true,
-            shadow: false,
+            shadow: true, // allows overlapping between sources and deps
             flavor: "".to_string(),
             bytecode_version: None,
             keep_testing_functions: false,
@@ -493,7 +507,13 @@ pub mod known_attributes {
         pub const TEST: &'static str = "test";
         pub const EXPECTED_FAILURE: &'static str = "expected_failure";
         pub const TEST_ONLY: &'static str = "test_only";
-        pub const CODE_ASSIGNMENT_NAME: &'static str = "abort_code";
+        pub const ABORT_CODE_NAME: &'static str = "abort_code";
+        pub const ARITHMETIC_ERROR_NAME: &'static str = "arithmetic_error";
+        pub const VECTOR_ERROR_NAME: &'static str = "vector_error";
+        pub const OUT_OF_GAS_NAME: &'static str = "out_of_gas";
+        pub const MAJOR_STATUS_NAME: &'static str = "major_status";
+        pub const MINOR_STATUS_NAME: &'static str = "minor_status";
+        pub const ERROR_LOCATION: &'static str = "location";
 
         pub const fn name(&self) -> &str {
             match self {
@@ -521,10 +541,20 @@ pub mod known_attributes {
             static EXPECTED_FAILURE_POSITIONS: Lazy<BTreeSet<AttributePosition>> =
                 Lazy::new(|| IntoIterator::into_iter([AttributePosition::Function]).collect());
             match self {
-                TestingAttribute::TestOnly => &*TEST_ONLY_POSITIONS,
-                TestingAttribute::Test => &*TEST_POSITIONS,
-                TestingAttribute::ExpectedFailure => &*EXPECTED_FAILURE_POSITIONS,
+                TestingAttribute::TestOnly => &TEST_ONLY_POSITIONS,
+                TestingAttribute::Test => &TEST_POSITIONS,
+                TestingAttribute::ExpectedFailure => &EXPECTED_FAILURE_POSITIONS,
             }
+        }
+
+        pub fn expected_failure_cases() -> &'static [&'static str] {
+            &[
+                Self::ABORT_CODE_NAME,
+                Self::ARITHMETIC_ERROR_NAME,
+                Self::VECTOR_ERROR_NAME,
+                Self::OUT_OF_GAS_NAME,
+                Self::MAJOR_STATUS_NAME,
+            ]
         }
     }
 
@@ -551,7 +581,7 @@ pub mod known_attributes {
                 .collect()
             });
             match self {
-                Self::VerifyOnly => &*VERIFY_ONLY_POSITIONS,
+                Self::VerifyOnly => &VERIFY_ONLY_POSITIONS,
             }
         }
     }
@@ -569,7 +599,7 @@ pub mod known_attributes {
             static BYTECODE_INSTRUCTION_POSITIONS: Lazy<BTreeSet<AttributePosition>> =
                 Lazy::new(|| IntoIterator::into_iter([AttributePosition::Function]).collect());
             match self {
-                NativeAttribute::BytecodeInstruction => &*BYTECODE_INSTRUCTION_POSITIONS,
+                NativeAttribute::BytecodeInstruction => &BYTECODE_INSTRUCTION_POSITIONS,
             }
         }
     }

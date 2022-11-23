@@ -5,13 +5,25 @@ Running Move unit tests
 [ FAIL    ] 0x1::M::single_signer_fail
 [ PASS    ] 0x1::M::single_signer_pass
 [ PASS    ] 0x1::M::test_correct_signer_arg_addrs
+0x1::M::multi_signer_fail
+Output: Ok(ChangeSet { accounts: {} })
+0x1::M::multi_signer_pass
+Output: Ok(ChangeSet { accounts: {} })
+0x1::M::multi_signer_pass_expected_failure
+Output: Ok(ChangeSet { accounts: {} })
+0x1::M::single_signer_fail
+Output: Ok(ChangeSet { accounts: {} })
+0x1::M::single_signer_pass
+Output: Ok(ChangeSet { accounts: {} })
+0x1::M::test_correct_signer_arg_addrs
+Output: Ok(ChangeSet { accounts: {} })
 
 Test failures:
 
 Failures in 0x1::M:
 
 ┌── multi_signer_fail ──────
-│ Test did not abort as expected
+│ Test did not error as expected
 └──────────────────
 
 
@@ -22,7 +34,7 @@ Failures in 0x1::M:
 │ 8 │     fun single_signer_fail(_a: signer) {
 │   │         ------------------ In this function in 0x1::M
 │ 9 │         abort 0
-│   │         ^^^^^^^ Test was not expected to abort but it aborted with 0 here
+│   │         ^^^^^^^ Test was not expected to error, but it aborted with code 0 originating in the module 00000000000000000000000000000001::M rooted here
 │ 
 │ 
 └──────────────────

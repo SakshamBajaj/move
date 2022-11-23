@@ -3,16 +3,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod bcs;
+pub mod debug;
 pub mod event;
 pub mod hash;
 pub mod signer;
 pub mod string;
+pub mod type_name;
 #[cfg(feature = "testing")]
 pub mod unit_test;
 pub mod vector;
-
-#[cfg(feature = "testing")]
-pub mod debug;
 
 mod helpers;
 
@@ -25,6 +24,7 @@ pub struct GasParameters {
     pub hash: hash::GasParameters,
     pub signer: signer::GasParameters,
     pub string: string::GasParameters,
+    pub type_name: type_name::GasParameters,
     pub vector: vector::GasParameters,
 
     #[cfg(feature = "testing")]
@@ -52,6 +52,12 @@ impl GasParameters {
                     base: 0.into(),
                     per_byte: 0.into(),
                     legacy_min_input_len: 0.into(),
+                },
+            },
+            type_name: type_name::GasParameters {
+                get: type_name::GetGasParameters {
+                    base: 0.into(),
+                    per_byte: 0.into(),
                 },
             },
             signer: signer::GasParameters {
@@ -114,6 +120,7 @@ pub fn all_natives(
     add_natives!("hash", hash::make_all(gas_params.hash));
     add_natives!("signer", signer::make_all(gas_params.signer));
     add_natives!("string", string::make_all(gas_params.string));
+    add_natives!("type_name", type_name::make_all(gas_params.type_name));
     add_natives!("vector", vector::make_all(gas_params.vector));
     #[cfg(feature = "testing")]
     {
@@ -126,8 +133,6 @@ pub fn all_natives(
 #[derive(Debug, Clone)]
 pub struct NurseryGasParameters {
     event: event::GasParameters,
-
-    #[cfg(feature = "testing")]
     debug: debug::GasParameters,
 }
 
@@ -139,7 +144,6 @@ impl NurseryGasParameters {
                     unit_cost: 0.into(),
                 },
             },
-            #[cfg(feature = "testing")]
             debug: debug::GasParameters {
                 print: debug::PrintGasParameters {
                     base_cost: 0.into(),
@@ -167,10 +171,7 @@ pub fn nursery_natives(
     }
 
     add_natives!("event", event::make_all(gas_params.event));
-    #[cfg(feature = "testing")]
-    {
-        add_natives!("debug", debug::make_all(gas_params.debug));
-    }
+    add_natives!("debug", debug::make_all(gas_params.debug, move_std_addr));
 
     make_table_from_iter(move_std_addr, natives)
 }

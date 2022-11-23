@@ -143,7 +143,7 @@ impl<'a> InstantiationLoopChecker<'a> {
 
         fn rec(type_params: &mut HashSet<TypeParameterIndex>, ty: &SignatureToken) {
             match ty {
-                Bool | Address | U8 | U64 | U128 | Signer | Struct(_) => (),
+                Bool | Address | U8 | U16 | U32 | U64 | U128 | U256 | Signer | Struct(_) => (),
                 TypeParameter(idx) => {
                     type_params.insert(*idx);
                 }
@@ -233,8 +233,8 @@ impl<'a> InstantiationLoopChecker<'a> {
             .module
             .function_defs()
             .iter()
-            .filter(|def| !def.is_native())
             .enumerate()
+            .filter(|(_, def)| !def.is_native())
         {
             self.build_graph_function_def(FunctionDefinitionIndex::new(def_idx as u16), func_def)
         }

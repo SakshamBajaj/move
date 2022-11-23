@@ -4,23 +4,24 @@
 
 // Final phase of cleanup and optimization.
 
+use std::collections::BTreeSet;
+
+use move_binary_format::file_format::CodeOffset;
+use move_model::{
+    model::FunctionEnv,
+    pragmas::INTRINSIC_FUN_MAP_BORROW_MUT,
+    well_known::{EVENT_EMIT_EVENT, VECTOR_BORROW_MUT},
+};
+
 use crate::{
     dataflow_analysis::{DataflowAnalysis, TransferFunctions},
+    dataflow_domains::{AbstractDomain, JoinResult},
     function_target::{FunctionData, FunctionTarget},
     function_target_pipeline::{FunctionTargetProcessor, FunctionTargetsHolder},
     options::ProverOptions,
     stackless_bytecode::{BorrowNode, Bytecode, Operation},
     stackless_control_flow_graph::StacklessControlFlowGraph,
 };
-use move_binary_format::file_format::CodeOffset;
-use move_model::{
-    model::FunctionEnv,
-    well_known::{EVENT_EMIT_EVENT, VECTOR_BORROW_MUT},
-};
-
-use crate::dataflow_domains::{AbstractDomain, JoinResult};
-use move_model::well_known::TABLE_BORROW_MUT;
-use std::collections::BTreeSet;
 
 pub struct CleanAndOptimizeProcessor();
 
@@ -46,7 +47,7 @@ impl FunctionTargetProcessor for CleanAndOptimizeProcessor {
         let options = ProverOptions::get(func_env.module_env.env);
         let instrs = std::mem::take(&mut data.code);
         let new_instrs = Optimizer {
-            options: &*options,
+            options: &options,
             target: &FunctionTarget::new(func_env, &data),
         }
         .run(instrs);
@@ -115,7 +116,7 @@ impl<'a> TransferFunctions for Optimizer<'a> {
                         // Exploit knowledge about builtin functions
                         !(callee_env.is_well_known(VECTOR_BORROW_MUT)
                             || callee_env.is_well_known(EVENT_EMIT_EVENT)
-                            || callee_env.is_well_known(TABLE_BORROW_MUT))
+                            || callee_env.is_intrinsic_of(INTRINSIC_FUN_MAP_BORROW_MUT))
                     } else {
                         true
                     };

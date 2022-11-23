@@ -86,8 +86,9 @@ pub fn verify(
     locals: &UniqueMap<Var, SingleType>,
     cfg: &super::cfg::BlockCFG,
 ) -> BTreeMap<Label, BorrowState> {
-    let mut initial_state =
-        BorrowState::initial(locals, acquires.clone(), compilation_env.has_diags());
+    // check for existing errors
+    let has_errors = compilation_env.has_errors();
+    let mut initial_state = BorrowState::initial(locals, acquires.clone(), has_errors);
     initial_state.bind_arguments(&signature.parameters);
     let mut safety = BorrowSafety::new(locals);
     initial_state.canonicalize_locals(&safety.local_numbers);
@@ -139,7 +140,6 @@ fn command(context: &mut Context, sp!(loc, cmd_): &Command) {
 }
 
 fn lvalues(context: &mut Context, ls: &[LValue], values: Values) {
-    assert!(ls.len() == values.len());
     ls.iter()
         .zip(values)
         .for_each(|(l, value)| lvalue(context, l, value))

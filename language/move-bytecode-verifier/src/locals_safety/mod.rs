@@ -8,11 +8,11 @@
 
 mod abstract_state;
 
-use crate::absint::{AbstractInterpreter, BlockInvariant, BlockPostcondition, TransferFunctions};
+use crate::absint::{AbstractInterpreter, TransferFunctions};
 use abstract_state::{AbstractState, LocalState};
 use move_binary_format::{
     binary_views::{BinaryIndexedView, FunctionView},
-    errors::{PartialVMError, PartialVMResult},
+    errors::PartialVMResult,
     file_format::{Bytecode, CodeOffset},
 };
 use move_core_types::vm_status::StatusCode;
@@ -22,16 +22,7 @@ pub(crate) fn verify<'a>(
     function_view: &'a FunctionView<'a>,
 ) -> PartialVMResult<()> {
     let initial_state = AbstractState::new(resolver, function_view)?;
-    let inv_map = LocalsSafetyAnalysis().analyze_function(initial_state, function_view);
-    // Report all the join failures
-    for (_block_id, BlockInvariant { post, .. }) in inv_map {
-        match post {
-            BlockPostcondition::Error(err) => return Err(err),
-            // Block might be unprocessed if all predecessors had an error
-            BlockPostcondition::Unprocessed | BlockPostcondition::Success => (),
-        }
-    }
-    Ok(())
+    LocalsSafetyAnalysis().analyze_function(initial_state, function_view)
 }
 
 fn execute_inner(
@@ -102,8 +93,11 @@ fn execute_inner(
         | Bytecode::ImmBorrowField(_)
         | Bytecode::ImmBorrowFieldGeneric(_)
         | Bytecode::LdU8(_)
+        | Bytecode::LdU16(_)
+        | Bytecode::LdU32(_)
         | Bytecode::LdU64(_)
         | Bytecode::LdU128(_)
+        | Bytecode::LdU256(_)
         | Bytecode::LdConst(_)
         | Bytecode::LdTrue
         | Bytecode::LdFalse
@@ -116,8 +110,11 @@ fn execute_inner(
         | Bytecode::ReadRef
         | Bytecode::WriteRef
         | Bytecode::CastU8
+        | Bytecode::CastU16
+        | Bytecode::CastU32
         | Bytecode::CastU64
         | Bytecode::CastU128
+        | Bytecode::CastU256
         | Bytecode::Add
         | Bytecode::Sub
         | Bytecode::Mul
@@ -163,7 +160,6 @@ struct LocalsSafetyAnalysis();
 
 impl TransferFunctions for LocalsSafetyAnalysis {
     type State = AbstractState;
-    type AnalysisError = PartialVMError;
 
     fn execute(
         &mut self,
@@ -171,7 +167,7 @@ impl TransferFunctions for LocalsSafetyAnalysis {
         bytecode: &Bytecode,
         index: CodeOffset,
         _last_index: CodeOffset,
-    ) -> Result<(), Self::AnalysisError> {
+    ) -> PartialVMResult<()> {
         execute_inner(state, bytecode, index)
     }
 }

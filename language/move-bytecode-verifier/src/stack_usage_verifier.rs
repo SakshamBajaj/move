@@ -56,8 +56,22 @@ impl<'a> StackUsageVerifier<'a> {
                         .at_code_offset(self.current_function(), block_start),
                 );
             }
-            stack_size_increment -= num_pops;
-            stack_size_increment += num_pushes;
+            if let Some(new_incr) = u64::checked_sub(stack_size_increment, num_pops) {
+                stack_size_increment = new_incr
+            } else {
+                return Err(
+                    PartialVMError::new(StatusCode::NEGATIVE_STACK_SIZE_WITHIN_BLOCK)
+                        .at_code_offset(self.current_function(), block_start),
+                );
+            };
+            if let Some(new_incr) = u64::checked_add(stack_size_increment, num_pushes) {
+                stack_size_increment = new_incr
+            } else {
+                return Err(
+                    PartialVMError::new(StatusCode::POSITIVE_STACK_SIZE_AT_BLOCK_END)
+                        .at_code_offset(self.current_function(), block_start),
+                );
+            };
         }
 
         if stack_size_increment == 0 {
@@ -84,8 +98,11 @@ impl<'a> StackUsageVerifier<'a> {
 
             // Instructions that push, but don't pop
             Bytecode::LdU8(_)
+            | Bytecode::LdU16(_)
+            | Bytecode::LdU32(_)
             | Bytecode::LdU64(_)
             | Bytecode::LdU128(_)
+            | Bytecode::LdU256(_)
             | Bytecode::LdTrue
             | Bytecode::LdFalse
             | Bytecode::LdConst(_)
@@ -111,8 +128,11 @@ impl<'a> StackUsageVerifier<'a> {
             | Bytecode::MoveFrom(_)
             | Bytecode::MoveFromGeneric(_)
             | Bytecode::CastU8
+            | Bytecode::CastU16
+            | Bytecode::CastU32
             | Bytecode::CastU64
             | Bytecode::CastU128
+            | Bytecode::CastU256
             | Bytecode::VecLen(_)
             | Bytecode::VecPopBack(_) => (1, 1),
 

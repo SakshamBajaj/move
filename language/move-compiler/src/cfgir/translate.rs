@@ -368,8 +368,11 @@ pub(crate) fn move_value_from_value_(v_: Value_) -> MoveValue {
     match v_ {
         V::Address(a) => MV::Address(MoveAddress::new(a.into_bytes())),
         V::U8(u) => MV::U8(u),
+        V::U16(u) => MV::U16(u),
+        V::U32(u) => MV::U32(u),
         V::U64(u) => MV::U64(u),
         V::U128(u) => MV::U128(u),
+        V::U256(u) => MV::U256(u),
         V::Bool(b) => MV::Bool(b),
         V::Vector(_, vs) => MV::Vector(vs.into_iter().map(move_value_from_value).collect()),
     }
@@ -434,7 +437,8 @@ fn function_body(
                 &mut cfg,
                 &infinite_loop_starts,
             );
-            if !context.env.has_diags() {
+            // do not optimize if there are errors, warnings are okay
+            if !context.env.has_errors() {
                 cfgir::optimize(signature, &locals, &mut cfg);
             }
 

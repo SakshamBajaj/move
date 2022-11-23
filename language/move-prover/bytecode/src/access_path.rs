@@ -208,7 +208,7 @@ impl AbsAddr {
         true
     }
 
-    /// Substitute all occurences of Footprint(ap) in `self` by resolving the accesss path
+    /// Substitute all occurrences of Footprint(ap) in `self` by resolving the access path
     /// `ap` in `sub_map`
     pub fn substitute_footprint(
         &mut self,
@@ -351,7 +351,7 @@ impl GlobalKey {
         self.addr.is_statically_known() && self.ty.is_closed()
     }
 
-    /// Substitute all occurences of Footprint(ap) in `self.addr` by resolving the accesss path
+    /// Substitute all occurrences of Footprint(ap) in `self.addr` by resolving the access path
     /// `ap` in `sub_map`.
     pub fn substitute_footprint(
         &mut self,
@@ -472,7 +472,7 @@ impl Offset {
                     .get_type();
                 field_type.instantiate(types)
             }
-            (Type::Vector(t), Offset::VectorIndex) => (*t.clone()),
+            (Type::Vector(t), Offset::VectorIndex) => *t.clone(),
             (Type::Primitive(PrimitiveType::Address), Offset::Global(s)) => s.get_type(),
             (Type::Primitive(PrimitiveType::Signer), Offset::Global(s)) => {
                 // we conflate address and signer, so this can happen
@@ -482,7 +482,34 @@ impl Offset {
                 // couldn't infer the type of `base`. propagate the error
                 Type::Error
             }
-            _ => {
+            (Type::Primitive(_), Offset::Global(_))
+            | (Type::Primitive(_), Offset::Field(_))
+            | (Type::Primitive(_), Offset::VectorIndex)
+            | (Type::Tuple(_), Offset::Field(_))
+            | (Type::Tuple(_), Offset::VectorIndex)
+            | (Type::Tuple(_), Offset::Global(_))
+            | (Type::Vector(_), Offset::Field(_))
+            | (Type::Vector(_), Offset::Global(_))
+            | (Type::Struct(_, _, _), Offset::VectorIndex)
+            | (Type::Struct(_, _, _), Offset::Global(_))
+            | (Type::TypeParameter(_), Offset::Field(_))
+            | (Type::TypeParameter(_), Offset::VectorIndex)
+            | (Type::TypeParameter(_), Offset::Global(_))
+            | (Type::Reference(_, _), Offset::Field(_))
+            | (Type::Reference(_, _), Offset::VectorIndex)
+            | (Type::Reference(_, _), Offset::Global(_))
+            | (Type::Fun(_, _), Offset::Field(_))
+            | (Type::Fun(_, _), Offset::VectorIndex)
+            | (Type::Fun(_, _), Offset::Global(_))
+            | (Type::TypeDomain(_), Offset::Field(_))
+            | (Type::TypeDomain(_), Offset::VectorIndex)
+            | (Type::TypeDomain(_), Offset::Global(_))
+            | (Type::ResourceDomain(_, _, _), Offset::Field(_))
+            | (Type::ResourceDomain(_, _, _), Offset::VectorIndex)
+            | (Type::ResourceDomain(_, _, _), Offset::Global(_))
+            | (Type::Var(_), Offset::Field(_))
+            | (Type::Var(_), Offset::VectorIndex)
+            | (Type::Var(_), Offset::Global(_)) => {
                 panic!(
                     "get_type warning: Invalid base type {} for offset {:?} in get_type",
                     base.display(&move_model::ty::TypeDisplayContext::WithEnv {
