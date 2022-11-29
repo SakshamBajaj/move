@@ -27,7 +27,8 @@ use crate::{
     rapid_helpers::{
         rapid_var_declaration, rapid_type_suffix
     },
-    options::RapidOptions
+    options::RapidOptions,
+    spec_translator::SpecTranslator
 };
 use codespan::LineIndex;
 use move_model::{
@@ -44,6 +45,7 @@ pub struct RapidTranslator<'env> {
     env: &'env GlobalEnv,
     options: &'env RapidOptions,
     writer: &'env CodeWriter,
+    spec_translator: SpecTranslator<'env>,
     targets: &'env FunctionTargetsHolder,
 }
 

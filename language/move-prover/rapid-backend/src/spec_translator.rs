@@ -321,7 +321,7 @@ impl<'env> SpecTranslator<'env> {
             // Uninterpreted function has no body.
             emitln!(self.writer, ";");
             // Emit axiom about return type. Notice we don't need to process spec_var or memory
-            // parameters because an uninterpreted functions does not have those.
+            // parameters because an interpreted functions does not have those.
             let call = format!(
                 "{}({})",
                 boogie_name,

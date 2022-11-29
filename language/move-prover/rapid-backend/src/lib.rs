@@ -6,6 +6,7 @@
 mod rapid_helpers;
 pub mod options;
 pub mod bytecode_translator;
+pub mod spec_translator;
 
 #[allow(unused_imports)]
 use tera::{Context, Tera};
@@ -17,6 +18,7 @@ use move_model::{
 };
 use crate::{
     options::{RapidOptions},
+    spec_trn
 };
 
 const PRELUDE_TEMPLATE: &[u8] = include_bytes!("prelude/prelude.bpl");
